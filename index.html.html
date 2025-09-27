@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cross-Stitch Image Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Link to the Web App Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4f46e5">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .controls-card {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        /* Custom styles for range inputs */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #d3d3d3;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+        input[type="range"]:hover {
+            opacity: 1;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4f46e5;
+            cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4f46e5;
+            cursor: pointer;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #4f46e5;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Styles for panning and canvas transform */
+        #canvas {
+            cursor: grab;
+            transform-origin: top left;
+            transition: transform 0.1s linear;
+        }
+        #canvas.panning {
+            cursor: grabbing;
+        }
+        /* Styles for the background removal toggle switch */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #4f46e5;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #4f46e5;
+        }
+        /* Styles for image tray */
+        #imageTray {
+            scrollbar-width: thin;
+            scrollbar-color: #4f46e5 #e5e7eb;
+        }
+        #imageTray::-webkit-scrollbar {
+            height: 8px;
+        }
+        #imageTray::-webkit-scrollbar-track {
+            background: #e5e7eb;
+            border-radius: 10px;
+        }
+        #imageTray::-webkit-scrollbar-thumb {
+            background-color: #4f46e5;
+            border-radius: 10px;
+        }
+        .pulse {
+            animation: pulse-animation 2s infinite;
+        }
+        @keyframes pulse-animation {
+            0% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(129, 140, 248, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="min-h-screen flex flex-col items-center justify-center p-4">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-900">Cross-Stitch Generator</h1>
+            <p class="text-lg text-gray-600 mt-2">Turn any photo into a digital embroidery masterpiece.</p>
+        </header>
+
+        <main class="w-full mx-auto bg-white rounded-2xl shadow-xl p-6 md:p-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                <!-- Left Column: Upload and Pre-Adjustments -->
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="controls-card bg-gray-50/80 p-6 rounded-xl border border-gray-200">
+                        <h2 class="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">1. Upload Image</h2>
+                        <input type="file" id="imageLoader" accept="image/*" multiple class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"/>
+                         <div class="flex items-center justify-between pt-4">
+                            <label for="removeBackground" class="font-medium text-gray-700 select-none">Remove White Background</label>
+                            <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                                <input type="checkbox" name="removeBackground" id="removeBackground" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer right-4 transition-all duration-200 ease-in-out"/>
+                                <label for="removeBackground" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="filterControls" class="hidden controls-card bg-gray-50/80 p-6 rounded-xl border border-gray-200">
+                        <div class="flex justify-between items-center mb-4 border-b pb-2">
+                             <h2 class="text-2xl font-semibold text-gray-800">2. Pre-Adjustments</h2>
+                             <div class="flex items-center gap-2">
+                                <button id="copyPreviewBtn" class="text-sm bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded-full">Copy</button>
+                                <button id="resetFiltersBtn" class="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-1 px-3 rounded-full">Reset</button>
+                             </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-x-6 gap-y-4">
+                            <div><label for="brightness" class="block text-sm font-medium">Brightness: <span id="brightnessValue">0</span></label><input type="range" id="brightness" min="-100" max="100" value="0"></div>
+                            <div><label for="contrast" class="block text-sm font-medium">Contrast: <span id="contrastValue">0</span></label><input type="range" id="contrast" min="-100" max="100" value="0"></div>
+                            <div><label for="hue" class="block text-sm font-medium">Hue: <span id="hueValue">0</span></label><input type="range" id="hue" min="-180" max="180" value="0"></div>
+                            <div><label for="saturation" class="block text-sm font-medium">Saturation: <span id="saturationValue">0</span></label><input type="range" id="saturation" min="-100" max="100" value="0"></div>
+                            <div class="col-span-2"><label for="vibrance" class="block text-sm font-medium">Vibrance: <span id="vibranceValue">0</span></label><input type="range" id="vibrance" min="-100" max="100" value="0"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Center Column: Canvas and Image Display -->
+                <div class="lg:col-span-1 bg-gray-200 rounded-xl flex flex-col items-center justify-between p-4 min-h-[500px] lg:min-h-0 relative">
+                    <div id="placeholder" class="text-center text-gray-500 m-auto">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                          <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <h3 class="mt-2 text-sm font-medium">Upload up to 10 images to start</h3>
+                        <p class="mt-1 text-sm">PNG, JPG, GIF</p>
+                    </div>
+                    <div id="loader" class="hidden absolute z-10 text-center m-auto">
+                        <div class="loader mx-auto"></div>
+                        <p id="loaderText" class="mt-4 font-medium text-indigo-700">Stitching your masterpiece...</p>
+                    </div>
+                    <!-- View Controls are now here -->
+                    <div id="viewControls" class="hidden absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 w-auto bg-white/80 backdrop-blur-sm rounded-full shadow-lg p-2">
+                        <button id="zoomOutBtn" class="w-10 h-10 flex items-center justify-center bg-gray-200 text-gray-800 text-xl font-bold rounded-full hover:bg-gray-300 transition-colors">-</button>
+                        <div id="zoomLevelDisplay" class="text-center font-semibold text-gray-700 w-16">100%</div>
+                        <button id="zoomInBtn" class="w-10 h-10 flex items-center justify-center bg-gray-200 text-gray-800 text-xl font-bold rounded-full hover:bg-gray-300 transition-colors">+</button>
+                        <div class="h-6 w-px bg-gray-300 mx-2"></div> <!-- separator -->
+                         <div class="relative">
+                            <button id="downloadToggleBtn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-full hover:bg-green-700 transition-colors text-center inline-block">Download</button>
+                            <div id="downloadDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl z-20">
+                                <div class="py-1">
+                                    <span class="font-bold text-sm text-gray-700 block px-4 pt-2">PNG</span>
+                                    <a href="#" class="download-option text-sm text-gray-700 block px-4 py-2 hover:bg-gray-100" data-format="png" data-size="l">Large</a>
+                                    <a href="#" class="download-option text-sm text-gray-700 block px-4 py-2 hover:bg-gray-100" data-format="png" data-size="m">Medium</a>
+                                    <a href="#" class="download-option text-sm text-gray-700 block px-4 py-2 hover:bg-gray-100" data-format="png" data-size="s">Small</a>
+                                    <div class="border-t my-1"></div>
+                                    <span class="font-bold text-sm text-gray-700 block px-4 pt-2">JPEG</span>
+                                    <a href="#" class="download-option text-sm text-gray-700 block px-4 py-2 hover:bg-gray-100" data-format="jpeg" data-size="l">Large</a>
+                                    <a href="#" class="download-option text-sm text-gray-700 block px-4 py-2 hover:bg-gray-100" data-format="jpeg" data-size="m">Medium</a>
+                                    <a href="#" class="download-option text-sm text-gray-700 block px-4 py-2 hover:bg-gray-100" data-format="jpeg" data-size="s">Small</a>
+                                    <div class="border-t my-1"></div>
+                                    <span class="font-bold text-sm text-gray-400 block px-4 pt-2">TIFF</span>
+                                    <span class="text-sm text-gray-400 block px-4 py-2 cursor-not-allowed">Large (Not Supported)</span>
+                                    <span class="text-sm text-gray-400 block px-4 py-2 cursor-not-allowed">Medium (Not Supported)</span>
+                                    <span class="text-sm text-gray-400 block px-4 py-2 cursor-not-allowed">Small (Not Supported)</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Wrapper for scrolling and panning -->
+                    <div id="canvasWrapper" class="w-full h-full overflow-auto hidden">
+                        <canvas id="canvas" class="rounded-lg shadow-md"></canvas>
+                    </div>
+                    <!-- Image Tray for Thumbnails -->
+                    <div id="imageTrayWrapper" class="w-full hidden mt-4">
+                        <div id="imageTray" class="flex items-center gap-3 overflow-x-auto p-2 bg-gray-100 rounded-lg">
+                            <!-- Thumbnails will be injected here -->
+                        </div>
+                    </div>
+                </div>
+
+                 <!-- Right Column: Generation and Final Adjustments -->
+                <div class="lg:col-span-1 space-y-6">
+                     <div class="controls-card bg-gray-50/80 p-6 rounded-xl border border-gray-200">
+                         <h2 class="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">3. Generation Settings</h2>
+                        <div class="space-y-4">
+                            <div>
+                                <label for="stitchWidth" class="block mb-2 font-medium text-gray-700">Stitch Count: <span id="stitchWidthValue">60</span></label>
+                                <input type="range" id="stitchWidth" min="20" max="300" value="60" class="w-full">
+                            </div>
+                            <div>
+                                <label for="colorCount" class="block mb-2 font-medium text-gray-700">Number of Colors: <span id="colorCountValue">32</span></label>
+                                <input type="range" id="colorCount" min="2" max="300" value="32" class="w-full">
+                            </div>
+                             <div class="pt-2">
+                                <label for="fabricLoader" class="block mb-2 font-medium text-gray-700">Upload Fabric (optional)</label>
+                                <input type="file" id="fabricLoader" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100 cursor-pointer"/>
+                            </div>
+                             <div class="pt-2">
+                                <label for="grainLoader" class="block mb-2 font-medium text-gray-700">Upload Grain Texture (optional)</label>
+                                <input type="file" id="grainLoader" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100 cursor-pointer"/>
+                            </div>
+                            <div id="grainOpacityControl" class="pt-2 hidden">
+                                <label for="grainOpacity" class="block text-sm font-medium">Grain Opacity: <span id="grainOpacityValue">40</span>%</label>
+                                <input type="range" id="grainOpacity" min="10" max="100" value="40" class="w-full">
+                            </div>
+                             <div class="pt-2">
+                                <label for="watermarkLoader" class="block mb-2 font-medium text-gray-700">Upload Watermark PNG (optional)</label>
+                                <input type="file" id="watermarkLoader" accept="image/png" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100 cursor-pointer"/>
+                            </div>
+                            <div id="watermarkSizeControl" class="pt-2 hidden">
+                                <label for="watermarkSize" class="block text-sm font-medium">Watermark Size: <span id="watermarkSizeValue">15</span>%</label>
+                                <input type="range" id="watermarkSize" min="5" max="50" value="15" class="w-full">
+                            </div>
+                            <div id="watermarkOpacityControl" class="pt-2 hidden">
+                                <label for="watermarkOpacity" class="block text-sm font-medium">Watermark Opacity: <span id="watermarkOpacityValue">70</span>%</label>
+                                <input type="range" id="watermarkOpacity" min="10" max="100" value="70" class="w-full">
+                            </div>
+                        </div>
+                         <button id="generateBtn" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed mt-6" disabled>Generate</button>
+                    </div>
+
+                     <div id="finalFilterControls" class="hidden controls-card bg-gray-50/80 p-6 rounded-xl border border-gray-200">
+                        <div class="flex justify-between items-center mb-4 border-b pb-2">
+                             <h2 class="text-2xl font-semibold text-gray-800">4. Final Mockup Adjustments</h2>
+                             <button id="resetFinalFiltersBtn" class="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-1 px-3 rounded-full">Reset</button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-x-6 gap-y-4">
+                            <div><label for="finalBrightness" class="block text-sm font-medium">Brightness: <span id="finalBrightnessValue">0</span></label><input type="range" id="finalBrightness" min="-100" max="100" value="0"></div>
+                            <div><label for="finalContrast" class="block text-sm font-medium">Contrast: <span id="finalContrastValue">0</span></label><input type="range" id="finalContrast" min="-100" max="100" value="0"></div>
+                            <div><label for="finalHue" class="block text-sm font-medium">Hue: <span id="finalHueValue">0</span></label><input type="range" id="finalHue" min="-180" max="180" value="0"></div>
+                            <div><label for="finalSaturation" class="block text-sm font-medium">Saturation: <span id="finalSaturationValue">0</span></label><input type="range" id="finalSaturation" min="-100" max="100" value="0"></div>
+                            <div class="col-span-2"><label for="finalVibrance" class="block text-sm font-medium">Vibrance: <span id="finalVibranceValue">0</span></label><input type="range" id="finalVibrance" min="-100" max="100" value="0"></div>
+                        </div>
+                    </div>
+
+                    <div id="aiEnhanceSection" class="hidden controls-card bg-gray-50/80 p-6 rounded-xl border border-gray-200">
+                         <h2 class="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">5. Enhance with AI</h2>
+                         <textarea id="aiPrompt" class="w-full p-2 border border-gray-300 rounded-md text-sm" rows="3" placeholder=" without hoop,  without backstitches,high resolution  height according to width,don;t remove the white background if removing background option not selected,remove any items other than the fabric(table,needle),remove any words on the photo"></textarea>
+                         <button id="enhanceBtn" class="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 transition-colors pulse mt-4">✨ Enhance</button>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <footer class="text-center mt-8 text-gray-500">
+            <p>&copy; 2025 Image Effects Inc. All Rights Reserved.</p>
+        </footer>
+
+    </div>
+
+    <script>
+        // Register Service Worker for offline use
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+
+        // DOM Elements
+        const imageLoader = document.getElementById('imageLoader');
+        const generateBtn = document.getElementById('generateBtn');
+        const aiEnhanceSection = document.getElementById('aiEnhanceSection');
+        const aiPrompt = document.getElementById('aiPrompt');
+        const enhanceBtn = document.getElementById('enhanceBtn');
+        const downloadToggleBtn = document.getElementById('downloadToggleBtn');
+        const downloadDropdown = document.getElementById('downloadDropdown');
+        const copyPreviewBtn = document.getElementById('copyPreviewBtn');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const stitchWidthSlider = document.getElementById('stitchWidth');
+        const colorCountSlider = document.getElementById('colorCount');
+        const stitchWidthValue = document.getElementById('stitchWidthValue');
+        const colorCountValue = document.getElementById('colorCountValue');
+        const placeholder = document.getElementById('placeholder');
+        const loader = document.getElementById('loader');
+        const loaderText = document.getElementById('loaderText');
+        const canvasWrapper = document.getElementById('canvasWrapper'); 
+        const viewControls = document.getElementById('viewControls');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomLevelDisplay = document.getElementById('zoomLevelDisplay');
+        const removeBackgroundCheckbox = document.getElementById('removeBackground');
+        
+        const filterControls = document.getElementById('filterControls');
+        const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+        const finalFilterControls = document.getElementById('finalFilterControls');
+        const resetFinalFiltersBtn = document.getElementById('resetFinalFiltersBtn');
+
+        const imageTrayWrapper = document.getElementById('imageTrayWrapper');
+        const imageTray = document.getElementById('imageTray');
+        const fabricLoader = document.getElementById('fabricLoader');
+        const grainLoader = document.getElementById('grainLoader');
+        const grainOpacityControl = document.getElementById('grainOpacityControl');
+        const grainOpacity = document.getElementById('grainOpacity');
+        const grainOpacityValue = document.getElementById('grainOpacityValue');
+        const watermarkLoader = document.getElementById('watermarkLoader');
+        const watermarkSizeControl = document.getElementById('watermarkSizeControl');
+        const watermarkSize = document.getElementById('watermarkSize');
+        const watermarkSizeValue = document.getElementById('watermarkSizeValue');
+        const watermarkOpacityControl = document.getElementById('watermarkOpacityControl');
+        const watermarkOpacity = document.getElementById('watermarkOpacity');
+        const watermarkOpacityValue = document.getElementById('watermarkOpacityValue');
+
+        // Filter Sliders
+        const filters = {
+            brightness: document.getElementById('brightness'), contrast: document.getElementById('contrast'), hue: document.getElementById('hue'),
+            saturation: document.getElementById('saturation'), vibrance: document.getElementById('vibrance'),
+        };
+        const filterValues = {
+            brightness: document.getElementById('brightnessValue'), contrast: document.getElementById('contrastValue'), hue: document.getElementById('hueValue'),
+            saturation: document.getElementById('saturationValue'), vibrance: document.getElementById('vibranceValue'),
+        };
+        const finalFilters = {
+            brightness: document.getElementById('finalBrightness'), contrast: document.getElementById('finalContrast'), hue: document.getElementById('finalHue'),
+            saturation: document.getElementById('finalSaturation'), vibrance: document.getElementById('finalVibrance'),
+        };
+        const finalFilterValues = {
+            brightness: document.getElementById('finalBrightnessValue'), contrast: document.getElementById('finalContrastValue'), hue: document.getElementById('finalHueValue'),
+            saturation: document.getElementById('finalSaturationValue'), vibrance: document.getElementById('finalVibranceValue'),
+        };
+
+        let activeImageElement = null;
+        let imageSources = new Map();
+        let pixelatedImageForAI = null;
+        let watermarkImage = null;
+        let customFabricImage = null;
+        let grainTextureImage = null;
+        let finalImageBeforeFilters = null;
+
+        let isPanning = false;
+        let startX, startY, scrollLeftStart, scrollTopStart;
+        let zoomLevel = 1.0;
+        let filterTimeout;
+
+        // --- Event Listeners ---
+        imageLoader.addEventListener('change', handleImageUpload);
+        fabricLoader.addEventListener('change', handleFabricUpload);
+        grainLoader.addEventListener('change', handleGrainUpload);
+        watermarkLoader.addEventListener('change', handleWatermarkUpload);
+        generateBtn.addEventListener('click', generateCrossStitch);
+        enhanceBtn.addEventListener('click', enhanceWithAI);
+        
+        downloadToggleBtn.addEventListener('click', () => downloadDropdown.classList.toggle('hidden'));
+        document.querySelectorAll('.download-option').forEach(item => {
+            item.addEventListener('click', handleDownload);
+        });
+
+        copyPreviewBtn.addEventListener('click', () => copyCanvasToClipboard(copyPreviewBtn));
+        removeBackgroundCheckbox.addEventListener('change', handleBackgroundRemovalToggle);
+        resetFiltersBtn.addEventListener('click', resetFilters);
+        resetFinalFiltersBtn.addEventListener('click', resetFinalFilters);
+        
+        stitchWidthSlider.addEventListener('input', () => stitchWidthValue.textContent = stitchWidthSlider.value);
+        colorCountSlider.addEventListener('input', () => colorCountValue.textContent = colorCountSlider.value);
+
+        grainOpacity.addEventListener('input', () => { grainOpacityValue.textContent = grainOpacity.value; applyFinalFilters(); });
+        watermarkSize.addEventListener('input', () => { watermarkSizeValue.textContent = watermarkSize.value; applyFinalFilters(); });
+        watermarkOpacity.addEventListener('input', () => { watermarkOpacityValue.textContent = watermarkOpacity.value; applyFinalFilters(); });
+
+        Object.keys(filters).forEach(key => {
+            filters[key].addEventListener('input', () => {
+                filterValues[key].textContent = filters[key].value;
+                clearTimeout(filterTimeout);
+                filterTimeout = setTimeout(applyFiltersToPreview, 100);
+            });
+        });
+
+        Object.keys(finalFilters).forEach(key => {
+            finalFilters[key].addEventListener('input', () => {
+                finalFilterValues[key].textContent = finalFilters[key].value;
+                applyFinalFilters();
+            });
+        });
+
+        canvas.addEventListener('mousedown', startPan);
+        canvas.addEventListener('mouseleave', endPan);
+        canvas.addEventListener('mouseup', endPan);
+        canvas.addEventListener('mousemove', doPan);
+        zoomInBtn.addEventListener('click', () => updateZoom(0.2));
+        zoomOutBtn.addEventListener('click', () => updateZoom(-0.2));
+        
+        // Hide dropdown if clicked outside
+        window.addEventListener('click', function(e) {
+          if (downloadToggleBtn && !downloadToggleBtn.contains(e.target) && downloadDropdown && !downloadDropdown.contains(e.target)) {
+            downloadDropdown.classList.add('hidden');
+          }
+        });
+
+        // --- Image Handling & Uploads ---
+        function handleImageUpload(e) {
+            const files = e.target.files; if (files.length === 0) return;
+            imageTray.innerHTML = ''; imageSources.clear(); activeImageElement = null;
+            const filesToProcess = Array.from(files).slice(0, 10);
+            if (files.length > 10) alert("Max 10 images. First 10 selected.");
+            filesToProcess.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const thumbId = `thumb-${Date.now()}-${index}`;
+                    imageSources.set(thumbId, { base: event.target.result, processed: event.target.result, name: file.name });
+                    const thumb = document.createElement('img');
+                    thumb.src = event.target.result; thumb.id = thumbId;
+                    thumb.className = "h-20 w-20 object-cover rounded-md cursor-pointer border-4 border-transparent hover:opacity-80 transition-all";
+                    thumb.onclick = () => setActiveImage(thumb);
+                    imageTray.appendChild(thumb);
+                    if (index === 0) {
+                        setActiveImage(thumb);
+                        filterControls.classList.remove('hidden');
+                        generateBtn.disabled = false;
+                    }
+                }
+                reader.readAsDataURL(file);
+            });
+            imageTrayWrapper.classList.remove('hidden');
+        }
+
+        function handleFabricUpload(e) {
+            const file = e.target.files[0];
+            if(file){const reader=new FileReader();reader.onload=function(event){customFabricImage=new Image();customFabricImage.src=event.target.result;}
+            reader.readAsDataURL(file);}else{customFabricImage=null;}
+        }
+        
+        function handleGrainUpload(e) {
+            const file = e.target.files[0];
+            if(file){const reader=new FileReader();reader.onload=function(event){grainTextureImage=new Image();grainTextureImage.onload=()=>{if(finalImageBeforeFilters)applyFinalFilters();}
+            grainTextureImage.src=event.target.result;grainOpacityControl.classList.remove('hidden');}
+            reader.readAsDataURL(file);}else{grainTextureImage=null;grainOpacityControl.classList.add('hidden');if(finalImageBeforeFilters)applyFinalFilters();}
+        }
+
+        function handleWatermarkUpload(e) {
+            const file = e.target.files[0];
+            if(file){const reader=new FileReader();reader.onload=function(event){watermarkImage=new Image();watermarkImage.onload=()=>{if(finalImageBeforeFilters)applyFinalFilters();};
+            watermarkImage.src=event.target.result;watermarkSizeControl.classList.remove('hidden');watermarkOpacityControl.classList.remove('hidden');}
+            reader.readAsDataURL(file);}else{watermarkImage=null;watermarkSizeControl.classList.add('hidden');watermarkOpacityControl.classList.add('hidden');if(finalImageBeforeFilters)applyFinalFilters();}
+        }
+
+        function setActiveImage(thumbElement) {
+            if (activeImageElement) activeImageElement.classList.remove('border-indigo-500', 'shadow-md');
+            activeImageElement = thumbElement;
+            activeImageElement.classList.add('border-indigo-500', 'shadow-md');
+            removeBackgroundCheckbox.checked = false;
+            resetFilters();
+        }
+
+        function handleBackgroundRemovalToggle() {
+            if (!activeImageElement) return;
+            loader.classList.remove('hidden');
+            const thumbId = activeImageElement.id;
+            const sources = imageSources.get(thumbId);
+            setTimeout(() => {
+                let imageToProcess = new Image();
+                imageToProcess.onload = () => {
+                     if (removeBackgroundCheckbox.checked) {
+                        loaderText.textContent = 'Removing white...';
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = imageToProcess.width; tempCanvas.height = imageToProcess.height;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        tempCtx.drawImage(imageToProcess, 0, 0);
+                        const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                        const data = imageData.data;
+                        const threshold = 245;
+                        for (let i = 0; i < data.length; i += 4) { if (data[i] > threshold && data[i+1] > threshold && data[i+2] > threshold) data[i + 3] = 0; }
+                        tempCtx.putImageData(imageData, 0, 0);
+                        sources.processed = tempCanvas.toDataURL();
+                    } else { sources.processed = sources.base; }
+                    applyFiltersToPreview();
+                    loader.classList.add('hidden');
+                    loaderText.textContent = 'Stitching...';
+                };
+                imageToProcess.src = sources.base;
+            }, 50);
+        }
+
+        // --- Filter Logic ---
+        function resetFilters() { Object.keys(filters).forEach(key => { filters[key].value = 0; filterValues[key].textContent = 0; }); if(activeImageElement) applyFiltersToPreview(); }
+        function resetFinalFilters() { Object.keys(finalFilters).forEach(key => { finalFilters[key].value = 0; finalFilterValues[key].textContent = 0; }); if(finalImageBeforeFilters) applyFinalFilters(); }
+
+        function applyFiltersToPreview() {
+            if (!activeImageElement) return;
+            const sources = imageSources.get(activeImageElement.id);
+            const imageToFilter = new Image();
+            imageToFilter.onload = () => {
+                const tempCanvas = getFilteredImageCanvas(imageToFilter, filters, filterValues);
+                displayImageOnCanvas(tempCanvas);
+            };
+            imageToFilter.src = sources.processed;
+        }
+
+        function displayImageOnCanvas(img) {
+            const maxCanvasWidth=placeholder.parentElement.clientWidth,maxCanvasHeight=placeholder.parentElement.clientHeight;
+            let ratio=Math.min(maxCanvasWidth/img.width,maxCanvasHeight/img.height,1);
+            canvas.width=img.width*ratio;canvas.height=img.height*ratio;
+            ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
+            placeholder.classList.add('hidden');canvasWrapper.classList.remove('hidden');
+            viewControls.classList.add('hidden');aiEnhanceSection.classList.add('hidden');
+            finalFilterControls.classList.add('hidden');finalImageBeforeFilters=null;
+        }
+
+        // --- Generation ---
+        function generateCrossStitch() {
+            if (!activeImageElement) return;
+            loader.classList.remove('hidden'); generateBtn.disabled = true;
+            zoomLevel = 1.0; applyZoom();
+            const sources = imageSources.get(activeImageElement.id);
+            const imageToProcess = new Image();
+            imageToProcess.onload = () => {
+                const filteredImageCanvas = getFilteredImageCanvas(imageToProcess, filters, filterValues);
+                const stitchWidth = parseInt(stitchWidthSlider.value), numColors = parseInt(colorCountSlider.value);
+                const aspectRatio = filteredImageCanvas.height / filteredImageCanvas.width;
+                const stitchHeight = Math.round(stitchWidth * aspectRatio);
+                const tempCanvas = document.createElement('canvas'); tempCanvas.width = stitchWidth; tempCanvas.height = stitchHeight;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(filteredImageCanvas, 0, 0, stitchWidth, stitchHeight);
+                const imageData = tempCtx.getImageData(0, 0, stitchWidth, stitchHeight);
+                const pixels = imageData.data;
+                const colorPalette = createPalette(pixels, numColors);
+                const quantizedPixels = applyPalette(pixels, colorPalette);
+                const pixelCanvas = document.createElement('canvas'); const pixelBlockSize = 10;
+                pixelCanvas.width = stitchWidth * pixelBlockSize; pixelCanvas.height = stitchHeight * pixelBlockSize;
+                const pixelCtx = pixelCanvas.getContext('2d');
+                for (let y=0;y<stitchHeight;y++){for(let x=0;x<stitchWidth;x++){const i=(y*stitchWidth+x)*4;if(quantizedPixels[i+3]<128)continue;const r=quantizedPixels[i],g=quantizedPixels[i+1],b=quantizedPixels[i+2];pixelCtx.fillStyle=`rgb(${r},${g},${b})`;pixelCtx.fillRect(x*pixelBlockSize,y*pixelBlockSize,pixelBlockSize,pixelBlockSize);}}
+                pixelatedImageForAI = pixelCanvas.toDataURL('image/png');
+                const stitchSize = Math.max(10, Math.floor(1000 / stitchWidth));
+                canvas.width = stitchWidth * stitchSize; canvas.height = stitchHeight * stitchSize;
+                drawBackground(stitchSize);
+                for(let y=0;y<stitchHeight;y++){for(let x=0;x<stitchWidth;x++){const i=(y*stitchWidth+x)*4;if(quantizedPixels[i+3]<128)continue;const r=quantizedPixels[i],g=quantizedPixels[i+1],b=quantizedPixels[i+2];drawStitch(x*stitchSize,y*stitchSize,stitchSize,`rgb(${r},${g},${b})`);}}
+                finalImageBeforeFilters = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                resetFinalFilters();
+                loader.classList.add('hidden'); generateBtn.disabled = false;
+                viewControls.classList.remove('hidden'); aiEnhanceSection.classList.remove('hidden'); finalFilterControls.classList.remove('hidden');
+            };
+            imageToProcess.src = sources.processed;
+        }
+        
+        function getFilteredImageCanvas(loadedImage, filterSet, valueSet) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width=loadedImage.width;tempCanvas.height=loadedImage.height;
+            const tempCtx=tempCanvas.getContext('2d');tempCtx.drawImage(loadedImage,0,0);
+            let imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            applyFilterCalculations(imageData.data, filterSet, valueSet);
+            tempCtx.putImageData(imageData, 0, 0);
+            return tempCanvas;
+        }
+        
+        async function enhanceWithAI() {
+            if (!pixelatedImageForAI) { alert("Please generate a cross-stitch first."); return; }
+            loader.classList.remove('hidden'); loaderText.textContent = 'Enhancing with AI...'; enhanceBtn.disabled = true;
+            const base64ImageData = pixelatedImageForAI.split(',')[1];
+            let userPrompt = aiPrompt.value.trim() || aiPrompt.placeholder;
+            try {
+                const apiKey = ""; const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+                const payload = { contents: [{ parts: [{ text: userPrompt }, { inlineData: { mimeType: "image/png", data: base64ImageData } }] }], generationConfig: { responseModalities: ['IMAGE'] }, };
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error(`API call failed: ${response.statusText}`);
+                const result = await response.json();
+                const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+                if (base64Data) {
+                    const enhancedImage = new Image();
+                    enhancedImage.onload = () => {
+                        const bgCanvas = document.createElement('canvas');
+                        bgCanvas.width=enhancedImage.width;bgCanvas.height=enhancedImage.height;
+                        const bgCtx = bgCanvas.getContext('2d');
+                        drawBackgroundOnCanvas(bgCtx, 1);
+                        bgCtx.drawImage(enhancedImage, 0, 0);
+                        canvas.width = bgCanvas.width; canvas.height = bgCanvas.height;
+                        ctx.drawImage(bgCanvas, 0, 0);
+                        finalImageBeforeFilters = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        resetFinalFilters();
+                        viewControls.classList.remove('hidden');
+                    };
+                    enhancedImage.src = `data:image/png;base64,${base64Data}`;
+                } else { throw new Error("No image data in API response."); }
+            } catch (error) {
+                console.error("AI Enhancement failed:", error);
+                alert("Sorry, the AI enhancement failed. Please try again.");
+            } finally { loader.classList.add('hidden'); loaderText.textContent = 'Stitching...'; enhanceBtn.disabled = false; }
+        }
+
+        // --- Helper Functions ---
+        const clamp = (val, min = 0, max = 255) => Math.max(min, Math.min(max, val));
+        function createPalette(pixels, numColors) { const colorBuckets = []; const initialBucket = []; for (let i=0; i<pixels.length; i+=4) {if(pixels[i+3]>128) initialBucket.push([pixels[i],pixels[i+1],pixels[i+2]]);} if (initialBucket.length===0) return []; colorBuckets.push(initialBucket); while (colorBuckets.length<numColors) { let lbi=-1, maxR=-1, sD=-1; for(let i=0; i<colorBuckets.length; i++) { if (colorBuckets[i].length<2) continue; let rMin=255,rMax=0,gMin=255,gMax=0,bMin=255,bMax=0; for(const p of colorBuckets[i]){rMin=Math.min(rMin,p[0]);rMax=Math.max(rMax,p[0]);gMin=Math.min(gMin,p[1]);gMax=Math.max(gMax,p[1]);bMin=Math.min(bMin,p[2]);bMax=Math.max(bMax,p[2]);} const cMaxR=Math.max(rMax-rMin,gMax-gMin,bMax-bMin); if(cMaxR>maxR){maxR=cMaxR;lbi=i;const rR=rMax-rMin,gR=gMax-gMin;sD=rR>=gR&&rR>=bMax-bMin?0:gR>=rR&&gR>=bMax-bMin?1:2;}} if(lbi===-1)break; const bts=colorBuckets[lbi];bts.sort((a,b)=>a[sD]-b[sD]); const mi=Math.floor(bts.length/2); colorBuckets.splice(lbi,1,bts.slice(0,mi),bts.slice(mi));} return colorBuckets.map(b=>{if(b.length===0)return[0,0,0];let r=0,g=0,bl=0;b.forEach(p=>{r+=p[0];g+=p[1];bl+=p[2]});return[Math.round(r/b.length),Math.round(g/b.length),Math.round(bl/b.length)];});}
+        function applyPalette(pixels,palette){const nP=new Uint8ClampedArray(pixels.length);if(palette.length===0)return nP;for(let i=0;i<pixels.length;i+=4){if(pixels[i+3]<128){nP.set([0,0,0,0],i);continue;}const c=findClosestColor([pixels[i],pixels[i+1],pixels[i+2]],palette);nP.set([c[0],c[1],c[2],255],i);}return nP;}
+        function findClosestColor(c,p){let mD=Infinity,cl=p[0];for(const pc of p){const d=(c[0]-pc[0])**2+(c[1]-pc[1])**2+(c[2]-pc[2])**2;if(d<mD){mD=d;cl=pc;}}return cl;}
+        function drawBackground(stitchSize) { drawBackgroundOnCanvas(ctx, stitchSize); }
+        function drawBackgroundOnCanvas(context, stitchSize) { if (customFabricImage && customFabricImage.complete && customFabricImage.naturalWidth > 0) { context.fillStyle = context.createPattern(customFabricImage, 'repeat'); context.fillRect(0, 0, context.canvas.width, context.canvas.height); } else { context.fillStyle = '#FFFFFF'; context.fillRect(0, 0, context.canvas.width, context.canvas.height); context.strokeStyle = 'rgba(0,0,0,0.1)'; context.lineWidth = 1; for (let x=0;x<context.canvas.width;x+=stitchSize){context.beginPath();context.moveTo(x,0);context.lineTo(x,context.canvas.height);context.stroke();} for (let y=0;y<context.canvas.height;y+=stitchSize){context.beginPath();context.moveTo(0,y);context.lineTo(context.canvas.width,y);context.stroke();}}}
+        function drawStitch(x, y, size, color) { const lineThickness=Math.max(2,size*0.4),shadowOffset=Math.max(1,size*0.05);ctx.lineWidth=lineThickness;ctx.lineCap='round';const parts=color.match(/(\d+)/g);if(!parts||parts.length<3)return;const[r,g,b]=parts.map(Number);const shadowR=Math.max(0,r-40),shadowG=Math.max(0,g-40),shadowB=Math.max(0,b-40);ctx.strokeStyle=`rgb(${shadowR},${shadowG},${shadowB})`;ctx.beginPath();ctx.moveTo(x+shadowOffset,y+shadowOffset);ctx.lineTo(x+size+shadowOffset,y+size+shadowOffset);ctx.stroke();ctx.beginPath();ctx.moveTo(x+size+shadowOffset,y+shadowOffset);ctx.lineTo(x+shadowOffset,y+size+shadowOffset);ctx.stroke();ctx.strokeStyle=color;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+size,y+size);ctx.stroke();ctx.beginPath();ctx.moveTo(x+size,y);ctx.lineTo(x,y+size);ctx.stroke();}
+        function rgbToHsl(r,g,b){r/=255,g/=255,b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b);let h,s,l=(max+min)/2;if(max==min)h=s=0;else{const d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;break}h/=6}return[h,s,l];}
+        function hslToRgb(h,s,l){let r,g,b;if(s==0)r=g=b=l;else{const hue2rgb=(p,q,t)=>{if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p};const q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q;r=hue2rgb(p,q,h+1/3);g=hue2rgb(p,q,h);b=hue2rgb(p,q,h-1/3)}return[r*255,g*255,b*255];}
+
+        function applyFinalFilters() {
+            if (!finalImageBeforeFilters) return;
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = finalImageBeforeFilters.width;
+            tempCanvas.height = finalImageBeforeFilters.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.putImageData(finalImageBeforeFilters, 0, 0);
+
+            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            applyFilterCalculations(imageData.data, finalFilters, finalFilterValues);
+            tempCtx.putImageData(imageData, 0, 0);
+
+            canvas.width = tempCanvas.width; canvas.height = tempCanvas.height;
+            ctx.drawImage(tempCanvas, 0, 0);
+
+            applyOverlays();
+        }
+
+        function applyFilterCalculations(data, filterSet, valueSet) {
+             const brightness=parseInt(filterSet.brightness.value),contrast=parseInt(filterSet.contrast.value),hue=parseInt(filterSet.hue.value),saturation=parseInt(filterSet.saturation.value),vibrance=parseInt(filterSet.vibrance.value);
+            const contrastFactor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+            for (let i = 0; i < data.length; i += 4) {
+                 let r = data[i], g = data[i+1], b = data[i+2];
+                r = clamp(contrastFactor * (r - 128) + 128 + brightness);
+                g = clamp(contrastFactor * (g - 128) + 128 + brightness);
+                b = clamp(contrastFactor * (b - 128) + 128 + brightness);
+                if (hue !== 0 || saturation !== 0 || vibrance !== 0) {
+                    let hsl = rgbToHsl(r, g, b);
+                    hsl[0] += hue / 360;
+                    hsl[1] = clamp(hsl[1] + saturation / 100, 0, 1);
+                    if (vibrance !== 0) { const amount=(1 - Math.sqrt(hsl[1])) * (vibrance/100); hsl[1] = clamp(hsl[1] + amount, 0, 1); }
+                    let rgb = hslToRgb(hsl[0], hsl[1], hsl[2]);
+                    r = rgb[0]; g = rgb[1]; b = rgb[2];
+                }
+                data[i] = r; data[i+1] = g; data[i+2] = b;
+            }
+        }
+        
+        function applyOverlays() {
+            const img = new Image();
+            img.onload = () => {
+                canvas.width = img.width; canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+
+                if (grainTextureImage) {
+                    ctx.globalCompositeOperation = 'overlay';
+                    ctx.globalAlpha = parseInt(grainOpacity.value, 10) / 100;
+                    ctx.drawImage(grainTextureImage, 0, 0, canvas.width, canvas.height);
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.globalAlpha = 1.0;
+                }
+
+                if (watermarkImage) {
+                    const size = parseInt(watermarkSize.value, 10);
+                    const opacity = parseInt(watermarkOpacity.value, 10) / 100;
+                    addWatermark(canvas, watermarkImage, size, opacity);
+                }
+            };
+            img.src = canvas.toDataURL(); // Use current canvas state
+        }
+
+
+        function addWatermark(targetCanvas, image, sizePercent, opacity) {
+            if (!image || !image.complete || image.naturalWidth === 0) return;
+            const ctx = targetCanvas.getContext('2d');
+            const canvasWidth = targetCanvas.width;
+            const canvasHeight = targetCanvas.height;
+            const scale = (canvasWidth * (sizePercent / 100)) / image.width;
+            const watermarkWidth = image.width * scale;
+            const watermarkHeight = image.height * scale;
+            const margin = Math.max(10, canvasWidth * 0.02);
+            const x = canvasWidth - watermarkWidth - margin;
+            const y = canvasHeight - watermarkHeight - margin;
+            ctx.globalAlpha = opacity;
+            ctx.drawImage(image, x, y, watermarkWidth, watermarkHeight);
+            ctx.globalAlpha = 1.0;
+        }
+
+        // --- Panning, Zoom, Download, Copy ---
+        function startPan(e){e.preventDefault();isPanning=true;canvas.classList.add('panning');startX=e.pageX;startY=e.pageY;scrollLeftStart=canvasWrapper.scrollLeft;scrollTopStart=canvasWrapper.scrollTop;}
+        function endPan(){isPanning=false;canvas.classList.remove('panning');}
+        function doPan(e){if(!isPanning)return;e.preventDefault();const walkX=e.pageX-startX,walkY=e.pageY-startY;canvasWrapper.scrollLeft=scrollLeftStart-walkX;canvasWrapper.scrollTop=scrollTopStart-walkY;}
+        function updateZoom(amount){zoomLevel+=amount;zoomLevel=Math.max(0.2,Math.min(zoomLevel,5.0));applyZoom();}
+        function applyZoom(){canvas.style.transform=`scale(${zoomLevel})`;zoomLevelDisplay.textContent=`${Math.round(zoomLevel*100)}%`;}
+        
+        function handleDownload(e) {
+            e.preventDefault();
+            const format = e.target.dataset.format;
+            const size = e.target.dataset.size;
+            let sizeMultiplier = 1.0;
+            if (size === 'm') sizeMultiplier = 0.5;
+            if (size === 's') sizeMultiplier = 0.25;
+
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = canvas.width * sizeMultiplier;
+            tempCanvas.height = canvas.height * sizeMultiplier;
+            tempCtx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
+            
+            const mimeType = `image/${format}`;
+            const quality = format === 'jpeg' ? 0.9 : undefined;
+            const dataUrl = tempCanvas.toDataURL(mimeType, quality);
+
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            
+            const sources = imageSources.get(activeImageElement.id);
+            const originalName = sources.name || 'cross-stitch';
+            const lastDot = originalName.lastIndexOf('.');
+            const baseName = lastDot > -1 ? originalName.substring(0, lastDot) : originalName;
+            link.download = `${baseName}-cross-stitch-${size}.${format}`;
+
+            link.click();
+            downloadDropdown.classList.add('hidden');
+        }
+
+        function copyCanvasToClipboard(buttonElement, isPreview = false) {
+            // Simplified for now, just copy what's on the main canvas.
+            const originalText = buttonElement.textContent;
+            buttonElement.disabled = true;
+            canvas.toBlob((blob) => {
+                if (!blob) { console.error('Failed to create blob from canvas.'); buttonElement.textContent = 'Copy Failed'; setTimeout(() => { buttonElement.textContent=originalText; buttonElement.disabled=false; }, 2000); return; }
+                navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                    .then(() => {
+                        buttonElement.textContent = 'Copied!';
+                        setTimeout(() => { buttonElement.textContent = originalText; buttonElement.disabled = false; }, 2000);
+                    })
+                    .catch(err => {
+                        console.warn('navigator.clipboard.write failed, trying fallback:', err);
+                        try {
+                            const dataUrl = canvas.toDataURL();
+                            const textarea = document.createElement('textarea');
+                            textarea.style.position='fixed'; textarea.style.opacity='0'; textarea.value=dataUrl;
+                            document.body.appendChild(textarea);
+                            textarea.select();
+                            const successful = document.execCommand('copy');
+                            document.body.removeChild(textarea);
+                            if (successful) { buttonElement.textContent = 'Copied URL!'; } else { throw new Error('execCommand returned false'); }
+                        } catch (fallbackErr) {
+                            console.error('Fallback copy method failed:', fallbackErr);
+                            buttonElement.textContent = 'Copy Failed';
+                        } finally {
+                            setTimeout(() => { buttonElement.textContent = originalText; buttonElement.disabled = false; }, 2000);
+                        }
+                    });
+            }, 'image/png');
+        }
+
+    </script>
+</body>
+</html>
+
